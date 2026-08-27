@@ -19,7 +19,7 @@ const Home = () => {
     resetConversations,
   } = useConversations(currentUser);
 
-  const messages = activeChat.messages;
+  const messages = activeChat?.messages ?? [];
 
   const { mutate, isPending, error } = useMutation({
     mutationFn: (updatedMessages) => fetchChatResponse(updatedMessages),

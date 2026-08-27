@@ -148,9 +148,11 @@ export function useConversations(currentUser) {
     }
   };
 
-  const resetConversations = () => {
-    setConversations([createEmptyConversation()]);
-  };
+ const resetConversations = () => {
+  const fresh = createEmptyConversation();
+  setConversations([fresh]);
+  setActiveId(fresh.id);
+};
 
   return {
     conversations,
