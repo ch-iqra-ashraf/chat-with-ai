@@ -41,6 +41,30 @@ const Home = () => {
     resetConversations();
   };
 
+  // CHANGE: agar user logged-in nahi hai, to poori app ki jagah
+  // sirf ek centered login card render hoga — Sidebar/ChatWindow bilkul nahi.
+  if (!currentUser) {
+    return (
+      <div className="flex h-screen w-screen items-center justify-center bg-gray-200 font-sans">
+        <div className="flex flex-col items-center gap-4 bg-white p-8 rounded-2xl shadow-sm w-80">
+          <h1 className="text-lg font-semibold text-[#1a1a1a]">Welcome</h1>
+          <p className="text-sm text-gray-500 text-center">
+            Please sign in to start chatting.
+          </p>
+          <button
+            onClick={handleSignIn}
+            disabled={isSigningIn}
+            className="w-full flex items-center justify-center gap-2 bg-[#1e88e5] text-white px-3 py-2.5 text-sm rounded-xl font-medium disabled:opacity-60"
+          >
+            {isSigningIn ? "Signing in..." : "Sign in with Google"}
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  // CHANGE: yeh hissa (poora chat app) ab sirf tab render hota hai
+  // jab currentUser upar wale check se guzar chuka ho (i.e. logged in ho)
   return (
     <div className="flex h-screen w-screen bg-gray-200 font-sans overflow-hidden">
       <Sidebar
@@ -57,7 +81,6 @@ const Home = () => {
       />
 
       <div className="flex-1 flex flex-col h-full min-w-0">
-        {/* mobile top bar with hamburger */}
         <div className="md:hidden flex items-center gap-3 p-3 bg-white border-b border-[#e1ecf7]">
           <button
             onClick={() => setSidebarOpen(true)}
