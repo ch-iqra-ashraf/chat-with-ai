@@ -1,15 +1,6 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { db } from "../firebase";
-import {
-  collection,
-  doc,
-  setDoc,
-  addDoc,
-  getDocs,
-  query,
-  orderBy,
-  serverTimestamp,
-} from "firebase/firestore";
+import { collection, doc, setDoc, getDocs, query, orderBy } from "firebase/firestore";
 
 const STORAGE_KEY = "chat_conversations";
 
@@ -19,140 +10,96 @@ const createEmptyConversation = () => ({
     { role: "assistant", content: "Hello! How can I assist you today?" },
   ],
 });
+const normalize = (c) => ({ ...c, messages: c.messages ?? [] });
 
 export function useConversations(currentUser) {
-  // conversations = [{ id, messages }]
   const [conversations, setConversations] = useState(() => {
     const saved = localStorage.getItem(STORAGE_KEY);
-    return saved ? JSON.parse(saved) : [createEmptyConversation()];
+    return saved ? JSON.parse(saved).map(normalize) : [createEmptyConversation()];
   });
 
   const [activeId, setActiveId] = useState(() => conversations[0].id);
+  const loadedForUid = useRef(null); // avoid re-fetching Firestore on every re-render
 
   const conversationDocRef = (conversationId) =>
     doc(db, "users", currentUser.uid, "conversations", String(conversationId));
 
-  const messagesCollectionRef = (conversationId) =>
-    collection(
-      db,
-      "users",
-      currentUser.uid,
-      "conversations",
-      String(conversationId),
-      "messages",
-    );
-
-  // 1. Load the list of conversations (metadata only) once the user logs in
+  // Load this account's conversations once per sign-in (whole docs, no lazy subcollections)
   useEffect(() => {
-    const loadConversationList = async () => {
-      if (!currentUser) return; // not logged in — stick with localStorage/guest data
+    if (!currentUser) {
+      loadedForUid.current = null;
+      return;
+    }
+    if (loadedForUid.current === currentUser.uid) return;
 
+    const syncWithFirestore = async () => {
       try {
         const q = query(
           collection(db, "users", currentUser.uid, "conversations"),
           orderBy("id", "desc"),
         );
         const snapshot = await getDocs(q);
-        if (snapshot.empty) return;
 
-        const loaded = snapshot.docs.map((d) => ({
-          id: d.data().id,
-          messages: [], // messages are fetched lazily, see effect below
-        }));
-
-        setConversations(loaded);
-        setActiveId(loaded[0].id);
+        if (snapshot.empty) {
+          // first time this account signs in — push whatever guest chats exist locally
+          await Promise.all(
+            conversations.map((c) => setDoc(conversationDocRef(c.id), c)),
+          );
+        } else {
+          const loaded = snapshot.docs.map((d) => normalize(d.data()));
+          setConversations(loaded);
+          setActiveId(loaded[0].id);
+        }
+        loadedForUid.current = currentUser.uid;
       } catch (err) {
-        console.error("Failed to load conversations:", err);
+        console.error("Failed to sync conversations:", err);
       }
     };
 
-    loadConversationList();
+    syncWithFirestore();
+
   }, [currentUser]);
 
-  // 2. Lazily load the messages subcollection for whichever chat is active
+  // localStorage is the guest/offline fallback only
   useEffect(() => {
-    const loadMessages = async () => {
-      if (!currentUser || activeId == null) return;
+    if (!currentUser) {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(conversations));
+    }
+  }, [conversations, currentUser]);
 
-      const current = conversations.find((c) => c.id === activeId);
-      if (!current || current.messages.length > 0) return; // already loaded
-
-      try {
-        const q = query(
-          messagesCollectionRef(activeId),
-          orderBy("createdAt", "asc"),
-        );
-        const snapshot = await getDocs(q);
-        const messages = snapshot.docs.map((d) => d.data());
-
-        setConversations((prev) =>
-          prev.map((c) => (c.id === activeId ? { ...c, messages } : c)),
-        );
-      } catch (err) {
-        console.error("Failed to load messages:", err);
-      }
-    };
-
-    loadMessages();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeId, currentUser]);
-
-  // keep localStorage in sync for guest/offline use
-  useEffect(() => {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(conversations));
-  }, [conversations]);
-
-  // create/update the conversation's metadata doc (cheap, no messages inside it)
-  const ensureConversationDoc = (conversationId) => {
+  const saveConversationToFirestore = (conversation) => {
     if (!currentUser) return;
-    setDoc(
-      conversationDocRef(conversationId),
-      { id: conversationId },
-      { merge: true },
-    ).catch((err) => console.error("Failed to save conversation:", err));
-  };
-
-  // write a single message as its own document in the subcollection
-  const saveMessageToFirestore = (conversationId, message) => {
-    if (!currentUser) return;
-    addDoc(messagesCollectionRef(conversationId), {
-      ...message,
-      createdAt: serverTimestamp(),
-    }).catch((err) => console.error("Failed to save message:", err));
+    setDoc(conversationDocRef(conversation.id), conversation).catch((err) =>
+      console.error("Failed to save conversation:", err),
+    );
   };
 
   const activeChat = conversations.find((c) => c.id === activeId);
 
-  // append one message locally AND persist it as its own Firestore doc
   const addMessage = (conversationId, message) => {
-    setConversations((prev) =>
-      prev.map((c) =>
+    setConversations((prev) => {
+      const updated = prev.map((c) =>
         c.id === conversationId
           ? { ...c, messages: [...c.messages, message] }
           : c,
-      ),
-    );
-    ensureConversationDoc(conversationId);
-    saveMessageToFirestore(conversationId, message);
+      );
+      saveConversationToFirestore(updated.find((c) => c.id === conversationId));
+      return updated;
+    });
   };
 
   const handleNewChat = () => {
     const newChat = createEmptyConversation();
     setConversations((prev) => [newChat, ...prev]);
     setActiveId(newChat.id);
-
-    if (currentUser) {
-      ensureConversationDoc(newChat.id);
-      newChat.messages.forEach((m) => saveMessageToFirestore(newChat.id, m));
-    }
+    saveConversationToFirestore(newChat);
   };
 
- const resetConversations = () => {
-  const fresh = createEmptyConversation();
-  setConversations([fresh]);
-  setActiveId(fresh.id);
-};
+  const resetConversations = () => {
+    const fresh = createEmptyConversation();
+    setConversations([fresh]);
+    setActiveId(fresh.id);
+  };
 
   return {
     conversations,

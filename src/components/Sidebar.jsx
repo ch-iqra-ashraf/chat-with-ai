@@ -21,7 +21,7 @@ const Sidebar = ({
 
       <div className="flex-1 overflow-y-auto flex flex-col gap-2">
         {conversations
-          .filter((c) => c.messages.some((m) => m.role === "user"))
+          .filter((c) => c.messages?.some((m) => m.role === "user"))
           .map((c) => {
             const userMsg = c.messages.find((m) => m.role === "user");
             const topic = userMsg
