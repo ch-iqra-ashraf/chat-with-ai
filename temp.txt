@@ -1,0 +1,73 @@
+     const reader = response.body.getReader();
+      const decoder = new TextDecoder("utf-8");
+      let done = false;
+      let accumulatedChunks = "";
+
+      setMessages([...updatedMessages, { role: "assistant", content: "" }]);
+
+      while (!done) {
+        const { value, done: readingDone } = await reader.read();
+        done = readingDone;
+
+        if (value) {
+          const rawText = decoder.decode(value, { stream: !done });
+          const lines = rawText.split("\n");
+
+          for (const line of lines) {
+            const cleanedLine = line.trim();
+            if (!cleanedLine || cleanedLine === "data: [DONE]") continue;
+
+            if (cleanedLine.startsWith("data: ")) {
+              try {
+                const parsed = JSON.parse(cleanedLine.replace("data: ", ""));
+            const contentChunk = parsed.choices[0]?.delta?.content || "";
+
+                if (contentChunk) {
+                  accumulatedChunks += contentChunk;
+
+                  setMessages([
+                    ...updatedMessages,
+                    { role: "assistant", content: accumulatedChunks },
+                  ]);
+                }
+              } catch (e) {
+                // Ignore incomplete JSON chunks caught mid-stream
+              }
+            }
+          }
+        }
+      }
+    },
+    onError: (error, updatedMessages) => {
+      console.error(error);
+      setMessages([
+        ...updatedMessages,
+        { role: "assistant", content: "Error getting response." },
+      ]);
+    },
+  });
+
+
+  npm install firebase
+
+  // Import the functions you need from the SDKs you need
+import { initializeApp } from "firebase/app";
+import { getAnalytics } from "firebase/analytics";
+// TODO: Add SDKs for Firebase products that you want to use
+// https://firebase.google.com/docs/web/setup#available-libraries
+
+// Your web app's Firebase configuration
+// For Firebase JS SDK v7.20.0 and later, measurementId is optional
+const firebaseConfig = {
+  apiKey: "AIzaSyB9odIwoEjjuo7hB8kmaVhpdmSBWEOxakw",
+  authDomain: "chatwithai-3e3ab.firebaseapp.com",
+  projectId: "chatwithai-3e3ab",
+  storageBucket: "chatwithai-3e3ab.firebasestorage.app",
+  messagingSenderId: "797513959086",
+  appId: "1:797513959086:web:e0f06b8b73b2ff31414f3f",
+  measurementId: "G-7RJZ8JL2VY"
+};
+
+// Initialize Firebase
+const app = initializeApp(firebaseConfig);
+const analytics = getAnalytics(app);
