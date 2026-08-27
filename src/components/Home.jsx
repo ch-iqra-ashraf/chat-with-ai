@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { fetchChatResponse } from "../util/service";
 import { useAuth } from "./useAuth";
@@ -18,6 +18,8 @@ const Home = () => {
     handleNewChat,
     resetConversations,
   } = useConversations(currentUser);
+
+  const [sidebarOpen, setSidebarOpen] = useState(false);
 
   const messages = activeChat?.messages ?? [];
 
@@ -50,13 +52,29 @@ const Home = () => {
         isSigningIn={isSigningIn}
         onSignIn={handleSignIn}
         onSignOut={onSignOut}
+        isOpen={sidebarOpen}
+        onClose={() => setSidebarOpen(false)}
       />
-      <ChatWindow
-        messages={messages}
-        isPending={isPending}
-        error={error}
-        onSendMessage={handleSendMessage}
-      />
+
+      <div className="flex-1 flex flex-col h-full min-w-0">
+        {/* mobile top bar with hamburger */}
+        <div className="md:hidden flex items-center gap-3 p-3 bg-white border-b border-[#e1ecf7]">
+          <button
+            onClick={() => setSidebarOpen(true)}
+            className="text-xl leading-none text-[#1a1a1a]"
+          >
+            ☰
+          </button>
+          <span className="text-sm font-medium text-[#1a1a1a]">Chat</span>
+        </div>
+
+        <ChatWindow
+          messages={messages}
+          isPending={isPending}
+          error={error}
+          onSendMessage={handleSendMessage}
+        />
+      </div>
     </div>
   );
 };
